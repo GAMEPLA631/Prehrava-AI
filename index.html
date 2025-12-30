@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Moderný Video Prehrávač s Gamifikáciou (Local Storage)</title>
+    <!-- Načítanie Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Nastavenie písma Inter a tmavého pozadia */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a; /* Slate-900 */
+            color: #e2e8f0; /* Slate-200 */
+            min-height: 100vh;
+        }
+        /* Štýlovanie vlastného prehrávača */
+        .video-container {
+            position: relative;
+            background-color: #000;
+        }
+        .custom-controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(to top, rgba(0, 0, 0, 0.8), rgba(0, 0, 0, 0));
+            transition: opacity 0.3s;
+            opacity: 1;
+            padding: 0.5rem 1rem;
+        }
+        .video-container:hover .custom-controls:not(.hidden) {
+            opacity: 1;
+        }
+        /* Skrytie defaultných ovládacích prvkov */
+        video::-webkit-media-controls {
+            display: none !important;
+        }
+        video::-webkit-media-controls-enclosure {
+            display: none !important;
+        }
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary-blue': '#3b82f6',
+                        'reward-coin': '#f59e0b',
+                        'reward-token': '#a855f7',
+                        'reward-diamond': '#38bdf8',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="p-4 md:p-8">
+
+    <div id="loading-overlay" class="fixed inset-0 bg-slate-900/90 flex items-center justify-center z-50">
+        <div class="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-primary-blue"></div>
+        <p class="ml-4 text-lg">Načítavam dáta z lokálneho úložiska...</p>
+    </div>
+
+    <h1 class="text-3xl font-bold mb-6 text-center text-primary-blue">🎬 Video Hub s Gamifikáciou a AI</h1>
+
+    <!-- Hlavné rozloženie: Prehrávač (ľavá) a Panel odmien (pravá) -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        <!-- Ľavý stĺpec: Video Prehrávač a AI funkcie -->
+        <div class="lg:col-span-2">
+            <div id="video-wrapper" class="video-container rounded-xl shadow-2xl overflow-hidden mb-6">
+                <video id="video-player" class="w-full" poster="https://placehold.co/1280x720/1e293b/a8b2bf?text=Vyberte+s%C3%BAbor" controls preload="metadata"></video>
+                
+                <!-- Vlastné ovládacie prvky -->
+                <div id="controls" class="custom-controls flex justify-between items-center space-x-4">
+                    <div class="flex items-center space-x-3">
+                        <button id="play-pause-btn" class="text-3xl hover:text-white transition" title="Prehrať/Pozastaviť">▶️</button>
+                        <div class="w-48 h-1 bg-slate-600 rounded-full cursor-pointer" id="progress-bar-bg">
+                            <div class="h-1 bg-primary-blue rounded-full" id="progress-bar-fill" style="width: 0;"></div>
+                        </div>
+                        <span id="time-display" class="text-sm text-slate-400">0:00 / 0:00</span>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        
+                        <!-- AI Titulky -->
+                        <button id="generate-subtitles-btn" class="p-2 bg-slate-700 hover:bg-slate-600 rounded-full transition" title="AI Titulky (Vyžaduje API)">
+                            <span class="text-lg">🤖</span>
+                        </button>
+
+                        <!-- Výber kvality -->
+                        <div class="relative group">
+                            <button class="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition text-sm font-semibold" id="quality-btn">
+                                <span id="current-quality">720p</span>
+                            </button>
+                            <div id="quality-menu" class="absolute bottom-full right-0 mb-2 p-2 bg-slate-800 rounded-lg shadow-xl hidden flex-col space-y-1 w-32 z-10">
+                                <!-- Kvality budú pridané JS -->
+                            </div>
+                        </div>
+
+                        <!-- Celá obrazovka -->
+                        <button id="fullscreen-btn" class="text-2xl hover:text-white transition" title="Celá obrazovka">🖥️</button>
+                        
+                        <!-- Nastavenia -->
+                        <button id="settings-btn" class="text-2xl hover:text-white transition" title="Nastavenia">⚙️</button>
+                    </div>
+                </div>
+                
+                <!-- AI Titulky Zobrazenie (Simulácia) -->
+                <div id="subtitle-display" class="absolute bottom-16 left-1/2 transform -translate-x-1/2 bg-black/60 text-white text-lg p-2 rounded-lg pointer-events-none hidden max-w-[80%] text-center">
+                    Simulované AI titulky...
+                </div>
+            </div>
+
+            <!-- Tlačidlo pre výber súboru -->
+            <input type="file" id="file-input" accept="video/mp4" class="hidden" onchange="loadVideo(event)">
+            <button onclick="document.getElementById('file-input').click()" class="w-full bg-primary-blue hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-xl transition duration-200 shadow-md flex items-center justify-center space-x-2">
+                📂 Vybrať súbor MP4
+            </button>
+        </div>
+
+        <!-- Pravý stĺpec: Panel Odmien a Shop -->
+        <div class="lg:col-span-1 bg-slate-800 p-6 rounded-xl shadow-xl space-y-6">
+            <h2 class="text-2xl font-bold border-b border-slate-700 pb-3 text-center">Môj Účet a Odmeny</h2>
+            
+            <!-- Zostatok Mien -->
+            <div class="flex justify-between text-lg font-semibold bg-slate-700 p-3 rounded-lg">
+                <span>🪙 Mince (Coins):</span>
+                <span id="balance-coins" class="text-reward-coin">0</span>
+            </div>
+            <div class="flex justify-between text-lg font-semibold bg-slate-700 p-3 rounded-lg">
+                <span>✨ Tokeny (Tokens):</span>
+                <span id="balance-tokens" class="text-reward-token">0</span>
+            </div>
+            <div class="flex justify-between text-lg font-semibold bg-slate-700 p-3 rounded-lg">
+                <span>💎 Diamanty (Diamonds):</span>
+                <span id="balance-diamonds" class="text-reward-diamond">0</span>
+            </div>
+
+            <!-- Denný Balík -->
+            <div id="daily-bonus-card" class="p-4 bg-green-900/50 border border-green-700 rounded-lg text-center">
+                <h3 class="text-xl font-bold mb-2">🎁 Denný Balík Odmien</h3>
+                <p class="mb-3 text-sm text-green-300">Získajte 3000 mincí, tokenov a diamantov!</p>
+                <button id="claim-daily-btn" class="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-2 rounded-lg transition duration-200 disabled:opacity-50">
+                    Prevziať Dennú Odmenu
+                </button>
+            </div>
+
+            <!-- Gamepass Status -->
+            <div id="gamepass-card" class="p-4 bg-purple-900/50 border border-purple-700 rounded-lg text-center">
+                <h3 class="text-xl font-bold mb-2">🚀 VIP Gamepass</h3>
+                <p id="gamepass-status" class="mb-3 text-sm font-semibold">Stav: Neaktívny</p>
+                <button id="buy-gamepass-btn" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 rounded-lg transition duration-200">
+                    Aktivovať (5000 🪙)
+                </button>
+            </div>
+
+            <!-- Shop pre Odomknutie Funkcií -->
+            <h3 class="text-xl font-bold pt-4 border-t border-slate-700 mt-4">🛒 Shop Funkcií</h3>
+            <div id="shop-list" class="space-y-3">
+                <!-- Funkcie budú pridané JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Modálne okno Nastavenia -->
+    <div id="settings-modal" class="fixed inset-0 bg-black/70 hidden items-center justify-center z-50">
+        <div class="bg-slate-800 p-8 rounded-xl shadow-2xl w-full max-w-md">
+            <h2 class="text-2xl font-bold mb-4">⚙️ Nastavenia AI</h2>
+            <div class="mb-4">
+                <label for="api-key-input" class="block text-sm font-medium mb-2">Gemini API Kľúč:</label>
+                <input type="password" id="api-key-input" class="w-full p-2 rounded-lg bg-slate-700 border border-slate-600 focus:ring-primary-blue focus:border-primary-blue" placeholder="Zadajte svoj API kľúč">
+            </div>
+            <div id="ai-features-list" class="space-y-2 mb-6">
+                <h3 class="text-lg font-semibold mt-4">Dostupné AI Funkcie:</h3>
+                <!-- Zobrazia sa AI funkcie -->
+            </div>
+            <button id="save-settings-btn" class="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-2 rounded-lg transition duration-200">
+                Uložiť a Pripojiť
+            </button>
+            <button id="close-settings-btn" class="w-full mt-2 bg-slate-600 hover:bg-slate-500 text-white font-bold py-2 rounded-lg transition duration-200">
+                Zavrieť
+            </button>
+        </div>
+    </div>
+    
+    <!-- Modálne okno Správa/Chyba -->
+    <div id="message-modal" class="fixed inset-0 bg-black/70 hidden items-center justify-center z-50">
+        <div class="bg-slate-800 p-6 rounded-xl shadow-2xl w-full max-w-sm text-center">
+            <h3 id="message-title" class="text-xl font-bold mb-3 text-red-400">Chyba</h3>
+            <p id="message-text" class="mb-4">Dátová správa.</p>
+            <button onclick="document.getElementById('message-modal').classList.add('hidden'); document.getElementById('message-modal').classList.remove('flex');" class="bg-primary-blue hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg">
+                Rozumiem
+            </button>
+        </div>
+    </div>
+
+
+    <script>
+        // --- LOKÁLNE UKLADANIE KONŠTANTY ---
+        const LOCAL_STORAGE_KEY = 'videoPlayerGamificationData';
+        
+        // Predvolené stavy
+        const defaultState = {
+            coins: 0,
+            tokens: 0,
+            diamonds: 0,
+            unlockedFeatures: ['quality_720p', 'subtitles_basic'],
+            unlockedQualities: ['720p'],
+            gamepassActive: false,
+            apiKey: '',
+            lastDailyClaim: 0,
+            aiFeatures: {
+                subtitle_gen: { name: 'Generovanie AI Titulkov', price: { tokens: 5000 }, unlocked: false, description: 'Prepis hovoreného slova na titulky pomocou AI.' },
+                translation: { name: 'Preklad v Reálnom Čase', price: { diamonds: 8000 }, unlocked: false, description: 'Preklad titulkov do iného jazyka.' },
+            }
+        };
+
+        let userData = { ...defaultState };
+
+        // --- LOKÁLNE ÚLOŽISKO FUNKCIE ---
+        
+        /** Načíta dáta z localStorage */
+        function loadState() {
+            try {
+                const storedData = localStorage.getItem(LOCAL_STORAGE_KEY);
+                if (storedData) {
+                    // Spojenie defaultného stavu s uloženými dátami pre zachovanie nových polí
+                    userData = { ...defaultState, ...JSON.parse(storedData) };
+                } else {
+                    // Inicializácia a uloženie defaultného stavu, ak dáta neexistujú
+                    saveState();
+                }
+            } catch (e) {
+                console.error("Chyba pri načítaní dát z localStorage:", e);
+                // V prípade chyby použijeme defaultState
+            }
+            console.log("Dáta používateľa načítané:", userData);
+        }
+
+        /** Uloží dáta do localStorage */
+        function saveState() {
+            try {
+                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(userData));
+            } catch (e) {
+                console.error("Chyba pri ukladaní dát do localStorage:", e);
+                showMessage('Chyba Ukladania', 'Nepodarilo sa uložiť dáta do lokálneho úložiska prehliadača.');
+            }
+        }
+        
+        // --- POMOCNÉ FUNKCIE UI ---
+        
+        /** Zobrazí custom message modal */
+        function showMessage(title, text, isError = true) {
+            document.getElementById('message-title').textContent = title;
+            document.getElementById('message-text').textContent = text;
+            document.getElementById('message-title').className = isError ? 'text-xl font-bold mb-3 text-red-400' : 'text-xl font-bold mb-3 text-green-400';
+            document.getElementById('message-modal').classList.remove('hidden');
+            document.getElementById('message-modal').classList.add('flex');
+        }
+
+        /** Aktualizuje zostatky mien v UI */
+        function updateBalanceUI() {
+            document.getElementById('balance-coins').textContent = userData.coins.toLocaleString('sk-SK');
+            document.getElementById('balance-tokens').textContent = userData.tokens.toLocaleString('sk-SK');
+            document.getElementById('balance-diamonds').textContent = userData.diamonds.toLocaleString('sk-SK');
+        }
+        
+        /** Aktualizuje Gamepass status */
+        function updateGamepassUI() {
+            const statusEl = document.getElementById('gamepass-status');
+            const buyBtn = document.getElementById('buy-gamepass-btn');
+            if (userData.gamepassActive) {
+                statusEl.textContent = 'Stav: Aktívny (Získajte extra funkcie pri pozeraní)';
+                statusEl.classList.remove('text-red-400');
+                statusEl.classList.add('text-green-400');
+                buyBtn.textContent = 'Gamepass Aktívny';
+                buyBtn.disabled = true;
+                buyBtn.classList.add('bg-gray-500');
+                buyBtn.classList.remove('bg-purple-600', 'hover:bg-purple-500');
+            } else {
+                statusEl.textContent = 'Stav: Neaktívny';
+                statusEl.classList.add('text-red-400');
+                statusEl.classList.remove('text-green-400');
+                buyBtn.textContent = 'Aktivovať (5000 🪙)';
+                buyBtn.disabled = false;
+                buyBtn.classList.remove('bg-gray-500');
+                buyBtn.classList.add('bg-purple-600', 'hover:bg-purple-500');
+            }
+        }
+        
+        /** Vykreslí zoznam kvalít videa */
+        function renderQualityMenu() {
+            const qualityMenu = document.getElementById('quality-menu');
+            qualityMenu.innerHTML = '';
+            
+            // Logika pre simuláciu kvalít a ich odomknutie
+            const qualities = ['720p', '1080p', '2K', '4K'];
+            const current = videoPlayer.dataset.quality || '720p';
+
+            qualities.forEach(q => {
+                const isUnlocked = userData.unlockedQualities.includes(q);
+                const qualityDiv = document.createElement('div');
+                qualityDiv.className = `p-2 rounded-lg text-center cursor-pointer transition flex justify-between items-center ${isUnlocked ? (q === current ? 'bg-primary-blue' : 'hover:bg-slate-700') : 'bg-slate-700/50 cursor-not-allowed'}`;
+                
+                const lockIcon = isUnlocked ? '' : '🔒';
+                
+                if (isUnlocked) {
+                    qualityDiv.onclick = () => {
+                        videoPlayer.dataset.quality = q;
+                        document.getElementById('current-quality').textContent = q;
+                        qualityMenu.classList.add('hidden');
+                        showMessage('Kvalita', `Kvalita nastavená na ${q}. (Simulácia)`, false);
+                    };
+                }
+
+                qualityDiv.innerHTML = `<span>${q}</span> ${lockIcon}`;
+                qualityMenu.appendChild(qualityDiv);
+            });
+            
+            document.getElementById('quality-btn').onclick = () => qualityMenu.classList.toggle('hidden');
+        }
+
+        /** Vykreslí shop s odomknuteľnými funkciami */
+        function renderShop() {
+            const shopList = document.getElementById('shop-list');
+            shopList.innerHTML = '';
+            
+            // Simulované kvality na odomknutie
+            const qualityPrices = [
+                { q: '1080p', price: { coins: 5000 }, description: 'Odomknite Full HD kvalitu.' },
+                { q: '2K', price: { tokens: 7500 }, description: 'Odomknite vysoké rozlíšenie 2K.' },
+                { q: '4K', price: { diamonds: 10000 }, description: 'Odomknite Ultra HD (4K) kvalitu.' }
+            ];
+
+            const shopItems = [
+                ...qualityPrices.map(item => ({
+                    id: item.q,
+                    name: `Kvalita: ${item.q}`,
+                    description: item.description,
+                    price: item.price,
+                    type: 'quality',
+                    unlocked: userData.unlockedQualities.includes(item.q)
+                })),
+                ...Object.entries(defaultState.aiFeatures).map(([key, feature]) => ({
+                    id: key,
+                    name: feature.name,
+                    description: feature.description,
+                    price: feature.price,
+                    type: 'aifeature',
+                    // Skutočný stav odomknutia je z userData
+                    unlocked: userData.unlockedFeatures.includes(key)
+                }))
+            ];
+
+            shopItems.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'p-3 bg-slate-700 rounded-lg shadow-md flex justify-between items-center';
+
+                let priceDisplay = '';
+                if (item.price.coins) priceDisplay += `${item.price.coins.toLocaleString('sk-SK')} 🪙`;
+                if (item.price.tokens) priceDisplay += (priceDisplay ? ' + ' : '') + `${item.price.tokens.toLocaleString('sk-SK')} ✨`;
+                if (item.price.diamonds) priceDisplay += (priceDisplay ? ' + ' : '') + `${item.price.diamonds.toLocaleString('sk-SK')} 💎`;
+                
+                const button = document.createElement('button');
+                button.className = `py-1 px-3 rounded-lg text-sm font-semibold transition duration-200 ${item.unlocked ? 'bg-green-600' : 'bg-primary-blue hover:bg-blue-600'}`;
+                button.textContent = item.unlocked ? 'Odomknuté' : `Kúpiť (${priceDisplay})`;
+                button.disabled = item.unlocked;
+
+                if (!item.unlocked) {
+                    button.onclick = () => attemptUnlock(item.id, item.price, item.type);
+                }
+
+                div.innerHTML = `
+                    <div>
+                        <p class="font-bold">${item.name}</p>
+                        <p class="text-xs text-slate-400">${item.description}</p>
+                    </div>
+                `;
+                div.appendChild(button);
+                shopList.appendChild(div);
+            });
+        }
+        
+        /** Vykreslí dostupné AI funkcie v Nastaveniach */
+        function renderAIFeatures() {
+            const list = document.getElementById('ai-features-list');
+            list.innerHTML = '';
+            
+            Object.entries(defaultState.aiFeatures).forEach(([key, feature]) => {
+                const status = userData.unlockedFeatures.includes(key) ? 'Odomknuté' : 'Neodomknuté';
+                const statusColor = userData.unlockedFeatures.includes(key) ? 'text-green-400' : 'text-red-400';
+                list.innerHTML += `<p class="text-sm">- ${feature.name}: <span class="${statusColor}">${status}</span></p>`;
+            });
+        }
+        
+        /** Vykreslí celý stav */
+        function renderUI() {
+            updateBalanceUI();
+            updateGamepassUI();
+            renderShop();
+            renderQualityMenu();
+            renderAIFeatures();
+            checkDailyBonus();
+            document.getElementById('loading-overlay').classList.add('hidden');
+        }
+
+
+        // --- HERNÁ LOGIKA (REWARDS / SHOP) ---
+
+        /** Skontroluje a umožní prevzatie dennej odmeny */
+        function checkDailyBonus() {
+            const now = Date.now();
+            const oneDay = 24 * 60 * 60 * 1000;
+            const lastClaim = userData.lastDailyClaim || 0;
+            const claimBtn = document.getElementById('claim-daily-btn');
+            
+            if (now - lastClaim >= oneDay) {
+                claimBtn.disabled = false;
+                claimBtn.textContent = 'Prevziať Dennú Odmenu (3000 všetkého)';
+                claimBtn.classList.remove('opacity-50', 'bg-gray-500');
+                claimBtn.classList.add('bg-green-600', 'hover:bg-green-500');
+            } else {
+                claimBtn.disabled = true;
+                const nextClaimTime = new Date(lastClaim + oneDay);
+                const timeRemaining = nextClaimTime - now;
+                const hours = Math.floor(timeRemaining / (1000 * 60 * 60));
+                const minutes = Math.floor((timeRemaining % (1000 * 60 * 60)) / (1000 * 60));
+                claimBtn.textContent = `Dostupné o ${hours}h ${minutes}m`;
+                claimBtn.classList.add('opacity-50', 'bg-gray-500');
+                claimBtn.classList.remove('bg-green-600', 'hover:bg-green-500');
+            }
+        }
+        
+        /** Spracuje prevzatie dennej odmeny */
+        document.getElementById('claim-daily-btn').addEventListener('click', () => {
+            if (document.getElementById('claim-daily-btn').disabled) return;
+
+            userData.coins += 3000;
+            userData.tokens += 3000;
+            userData.diamonds += 3000;
+            userData.lastDailyClaim = Date.now();
+            
+            showMessage('Odmena Získaná', 'Získali ste 3000 mincí, tokenov a diamantov!', false);
+            updateBalanceUI();
+            checkDailyBonus();
+            saveState();
+        });
+
+        /** Logika na odomknutie itemu */
+        function attemptUnlock(itemId, price, type) {
+            const costCoins = price.coins || 0;
+            const costTokens = price.tokens || 0;
+            const costDiamonds = price.diamonds || 0;
+
+            if (userData.coins >= costCoins && userData.tokens >= costTokens && userData.diamonds >= costDiamonds) {
+                userData.coins -= costCoins;
+                userData.tokens -= costTokens;
+                userData.diamonds -= costDiamonds;
+                
+                if (type === 'quality') {
+                    userData.unlockedQualities.push(itemId);
+                } else if (type === 'aifeature') {
+                    userData.unlockedFeatures.push(itemId);
+                }
+
+                showMessage('Úspech', `Úspešne ste odomkli funkciu/kvalitu: ${itemId}!`, false);
+                updateBalanceUI();
+                renderShop();
+                renderQualityMenu();
+                renderAIFeatures();
+                saveState();
+            } else {
+                showMessage('Nedostatok Mien', 'Na odomknutie tejto funkcie nemáte dostatok mien.');
+            }
+        }
+        
+        /** Aktivácia Gamepassu */
+        document.getElementById('buy-gamepass-btn').addEventListener('click', () => {
+             const cost = 5000; // Cost in Coins
+             if (userData.gamepassActive) return;
+
+             if (userData.coins >= cost) {
+                 userData.coins -= cost;
+                 userData.gamepassActive = true;
+                 
+                 // Gamepass sa mení mesačne - simulácia
+                 userData.gamepassFeatures = ['Extra 500 Tokenov/Pozretie', 'Automatický výber kvality'];
+                 
+                 showMessage('Gamepass Aktivovaný', 'Gamepass je aktívny! Užite si pokročilé funkcie.', false);
+                 updateBalanceUI();
+                 updateGamepassUI();
+                 saveState();
+             } else {
+                 showMessage('Nedostatok Mien', 'Potrebujete 5000 mincí na aktiváciu Gamepassu.');
+             }
+        });
+
+
+        // --- AI API LOGIKA (Simulácia) ---
+
+        /** Funkcia pre volanie Gemini API pre titulky */
+        async function generateSubtitles(videoText) {
+            if (!userData.apiKey) {
+                showMessage('Chyba API', 'Pre generovanie titulkov musíte najprv v Nastaveniach zadať svoj API kľúč.');
+                return "Pre generovanie titulkov zadajte API kľúč.";
+            }
+            if (!userData.unlockedFeatures.includes('subtitle_gen')) {
+                 showMessage('Funkcia uzamknutá', 'Generovanie AI titulkov je uzamknutá funkcia. Odomknite ju v Shope!');
+                 return "Funkcia generovania AI titulkov je uzamknutá.";
+            }
+
+            const systemPrompt = "Act as a professional subtitle generator. Provide short, informal subtitles in Slovak for the given video content. Subtitles must be very concise, maximum 5 words. If the text only contains 'No audio', respond with 'Žiadny zvuk'.";
+            const userQuery = `Video content: "${videoText}". Generate subtitles in Slovak.`;
+            const apiKey = userData.apiKey;
+            
+            // Konštanta pre model a API
+            const model = "gemini-2.5-flash-preview-09-2025";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+            };
+
+            const maxRetries = 3;
+            let lastError = null;
+
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (response.ok) {
+                        const result = await response.json();
+                        const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                        if (text) {
+                            return text.trim();
+                        }
+                    }
+                    
+                    lastError = `API chyba: ${response.status} ${response.statusText}`;
+                    if (response.status < 500) break; 
+
+                } catch (e) {
+                    lastError = `Chyba siete: ${e.message}`;
+                }
+
+                // Exponenciálny backoff
+                await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000));
+            }
+            console.error("Generovanie titulkov zlyhalo po opakovaných pokusoch.", lastError);
+            showMessage('Chyba AI', `Nepodarilo sa vygenerovať titulky. ${lastError}`);
+            return "Nepodarilo sa vygenerovať titulky.";
+        }
+        
+        /** Spracuje kliknutie na tlačidlo generovania titulkov */
+        document.getElementById('generate-subtitles-btn').addEventListener('click', async () => {
+            const player = document.getElementById('video-player');
+            const subtitleDisplay = document.getElementById('subtitle-display');
+            
+            if (!player.src) {
+                showMessage('Chyba', 'Najprv načítajte video súbor.');
+                return;
+            }
+
+            // Simulácia prepisu videa na text (V reálnom svete by to bol prepis AI)
+            const simulatedText = player.duration > 0 ? "Osoba hovorí, poďme si zahrať hru. Slnko svieti a je krásny deň. Urobme to." : "No audio";
+            
+            subtitleDisplay.textContent = '🤖 Generujem titulky...';
+            subtitleDisplay.classList.remove('hidden');
+
+            const subtitles = await generateSubtitles(simulatedText);
+            subtitleDisplay.textContent = subtitles;
+            
+            // Skryť po 5 sekundách
+            setTimeout(() => subtitleDisplay.classList.add('hidden'), 5000);
+        });
+
+        
+        // --- VIDEO PREHRÁVAČ LOGIKA ---
+
+        const videoPlayer = document.getElementById('video-player');
+        const playPauseBtn = document.getElementById('play-pause-btn');
+        const fullscreenBtn = document.getElementById('fullscreen-btn');
+        const progressBarFill = document.getElementById('progress-bar-fill');
+        const progressBarBg = document.getElementById('progress-bar-bg');
+        const timeDisplay = document.getElementById('time-display');
+        
+        let videoLoaded = false;
+        
+        /** Načíta MP4 súbor do prehrávača */
+        window.loadVideo = function(event) {
+            const file = event.target.files[0];
+            if (file && file.type === 'video/mp4') {
+                const url = URL.createObjectURL(file);
+                videoPlayer.src = url;
+                videoPlayer.load();
+                videoLoaded = true;
+                showMessage('Video Načítané', `Video "${file.name}" je pripravené na prehrávanie.`, false);
+            } else {
+                showMessage('Chyba', 'Prosím, vyberte platný súbor typu MP4.');
+            }
+        }
+        
+        /** Formátovanie času */
+        function formatTime(seconds) {
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = Math.floor(seconds % 60);
+            return (h > 0 ? h + ':' : '') + (m < 10 && h > 0 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+        }
+
+        // Tlačidlo Prehrať/Pozastaviť
+        playPauseBtn.addEventListener('click', () => {
+            if (!videoLoaded) {
+                 showMessage('Chyba', 'Najprv načítajte video súbor.');
+                 return;
+            }
+            if (videoPlayer.paused) {
+                videoPlayer.play();
+                playPauseBtn.textContent = '⏸️';
+            } else {
+                videoPlayer.pause();
+                playPauseBtn.textContent = '▶️';
+            }
+        });
+
+        // Tlačidlo Celá obrazovka
+        fullscreenBtn.addEventListener('click', () => {
+            if (document.fullscreenElement) {
+                document.exitFullscreen();
+            } else {
+                videoPlayer.parentElement.requestFullscreen();
+            }
+        });
+        
+        // Aktualizácia stavu prehrávania
+        videoPlayer.addEventListener('play', () => playPauseBtn.textContent = '⏸️');
+        videoPlayer.addEventListener('pause', () => playPauseBtn.textContent = '▶️');
+        
+        // Aktualizácia časovej osy
+        videoPlayer.addEventListener('timeupdate', () => {
+            if (videoPlayer.duration) {
+                const percent = (videoPlayer.currentTime / videoPlayer.duration) * 100;
+                progressBarFill.style.width = `${percent}%`;
+                timeDisplay.textContent = `${formatTime(videoPlayer.currentTime)} / ${formatTime(videoPlayer.duration)}`;
+            }
+        });
+
+        // Kliknutie na časovú osu
+        progressBarBg.addEventListener('click', (e) => {
+            const rect = progressBarBg.getBoundingClientRect();
+            const pos = (e.clientX - rect.left) / rect.width;
+            videoPlayer.currentTime = pos * videoPlayer.duration;
+        });
+
+        // Koniec videa - Udelenie odmien
+        videoPlayer.addEventListener('ended', () => {
+            const rewardCoins = 1000;
+            const rewardTokens = 1000 + (userData.gamepassActive ? 500 : 0); // Gamepass bonus
+            const rewardDiamonds = 1000;
+            
+            userData.coins += rewardCoins;
+            userData.tokens += rewardTokens;
+            userData.diamonds += rewardDiamonds;
+            
+            showMessage('Odmena za Sledovanie!', `Získali ste ${rewardCoins} 🪙, ${rewardTokens} ✨ a ${rewardDiamonds} 💎!`, false);
+            updateBalanceUI();
+            saveState();
+            
+            // Reset pre prípadné ďalšie prehrávanie
+            playPauseBtn.textContent = '▶️';
+            videoPlayer.currentTime = 0;
+            progressBarFill.style.width = '0%';
+        });
+
+
+        // --- NASTAVENIA MODAL ---
+
+        document.getElementById('settings-btn').addEventListener('click', () => {
+            document.getElementById('api-key-input').value = userData.apiKey || '';
+            document.getElementById('settings-modal').classList.remove('hidden');
+            document.getElementById('settings-modal').classList.add('flex');
+        });
+
+        document.getElementById('close-settings-btn').addEventListener('click', () => {
+            document.getElementById('settings-modal').classList.add('hidden');
+        });
+
+        document.getElementById('save-settings-btn').addEventListener('click', () => {
+            const apiKey = document.getElementById('api-key-input').value.trim();
+            if (apiKey) {
+                userData.apiKey = apiKey;
+                saveState();
+                showMessage('Uložené', 'API kľúč bol úspešne uložený do lokálneho úložiska.', false);
+                document.getElementById('settings-modal').classList.add('hidden');
+            } else {
+                showMessage('Chyba', 'API kľúč nemôže byť prázdny.');
+            }
+        });
+        
+        // --- INICIALIZÁCIA ---
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // 1. Načítanie stavu z localStorage
+            loadState();
+            
+            // 2. Nastaví defaultnú kvalitu (ak ešte nebola nastavená)
+            if (!videoPlayer.dataset.quality) {
+                videoPlayer.dataset.quality = '720p';
+            }
+            document.getElementById('current-quality').textContent = videoPlayer.dataset.quality;
+
+            // 3. Vykreslenie UI
+            renderUI();
+        });
+
+    </script>
+</body>
+</html>
