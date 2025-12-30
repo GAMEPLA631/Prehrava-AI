@@ -63,7 +63,7 @@
 
     <div id="loading-overlay" class="fixed inset-0 bg-slate-900/90 flex items-center justify-center z-50">
         <div class="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-primary-blue"></div>
-        <p class="ml-4 text-lg">Načítavam dáta z lokálneho úložiska...</p>
+        <p class="ml-4 text-lg">Načítavam dáta a konfiguráciu...</p>
     </div>
 
     <h1 class="text-3xl font-bold mb-6 text-center text-primary-blue">🎬 Video Hub s Gamifikáciou a AI</h1>
@@ -74,7 +74,7 @@
         <!-- Ľavý stĺpec: Video Prehrávač a AI funkcie -->
         <div class="lg:col-span-2">
             <div id="video-wrapper" class="video-container rounded-xl shadow-2xl overflow-hidden mb-6">
-                <video id="video-player" class="w-full" poster="https://placehold.co/1280x720/1e293b/a8b2bf?text=Vyberte+s%C3%BAbor" controls preload="metadata"></video>
+                <video id="video-player" class="w-full" poster="https://placehold.co/1280x720/1e293b/a8b2bf?text=Na%C4%8D%C3%ADtajte+s%C3%BAbor+alebo+prep%C3%ADnajte+kvalitu" controls preload="metadata"></video>
                 
                 <!-- Vlastné ovládacie prvky -->
                 <div id="controls" class="custom-controls flex justify-between items-center space-x-4">
@@ -92,10 +92,10 @@
                             <span class="text-lg">🤖</span>
                         </button>
 
-                        <!-- Výber kvality -->
+                        <!-- Výber kvality (REAL SWITCHING) -->
                         <div class="relative group">
                             <button class="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition text-sm font-semibold" id="quality-btn">
-                                <span id="current-quality">720p</span>
+                                <span id="current-quality">Kvalita</span>
                             </button>
                             <div id="quality-menu" class="absolute bottom-full right-0 mb-2 p-2 bg-slate-800 rounded-lg shadow-xl hidden flex-col space-y-1 w-32 z-10">
                                 <!-- Kvality budú pridané JS -->
@@ -117,8 +117,8 @@
             </div>
 
             <!-- Tlačidlo pre výber súboru -->
-            <input type="file" id="file-input" accept="video/mp4" class="hidden" onchange="loadVideo(event)">
-            <button onclick="document.getElementById('file-input').click()" class="w-full bg-primary-blue hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-xl transition duration-200 shadow-md flex items-center justify-center space-x-2">
+            <input type="file" id="file-input" accept="video/mp4" class="hidden">
+            <button id="load-file-btn" class="w-full bg-primary-blue hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-xl transition duration-200 shadow-md flex items-center justify-center space-x-2">
                 📂 Vybrať súbor MP4
             </button>
         </div>
@@ -221,6 +221,15 @@
         };
 
         let userData = { ...defaultState };
+        let localVideoBlobUrl = null;
+        
+        // Externé URL pre simuláciu rôznych kvalít
+        const QUALITY_SOURCES = {
+            '720p': 'https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_1mb.mp4',
+            '1080p': 'https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_2mb.mp4', // Väčší súbor, simuluje vyššiu kvalitu
+            '2K': 'https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_1mb.mp4', // Používame rovnaký kvôli stabilite demo
+            '4K': 'https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_1mb.mp4', // Používame rovnaký kvôli stabilite demo
+        };
 
         // --- LOKÁLNE ÚLOŽISKO FUNKCIE ---
         
@@ -229,15 +238,12 @@
             try {
                 const storedData = localStorage.getItem(LOCAL_STORAGE_KEY);
                 if (storedData) {
-                    // Spojenie defaultného stavu s uloženými dátami pre zachovanie nových polí
                     userData = { ...defaultState, ...JSON.parse(storedData) };
                 } else {
-                    // Inicializácia a uloženie defaultného stavu, ak dáta neexistujú
                     saveState();
                 }
             } catch (e) {
                 console.error("Chyba pri načítaní dát z localStorage:", e);
-                // V prípade chyby použijeme defaultState
             }
             console.log("Dáta používateľa načítané:", userData);
         }
@@ -293,28 +299,65 @@
             }
         }
         
-        /** Vykreslí zoznam kvalít videa */
-        function renderQualityMenu() {
+        /** Nastaví aktívnu kvalitu a URL videa */
+        function setVideoQuality(quality, url) {
+            const videoPlayer = document.getElementById('video-player');
+            const currentTime = videoPlayer.currentTime;
+            
+            videoPlayer.dataset.quality = quality;
+            document.getElementById('current-quality').textContent = quality;
+            
+            // Prepneme src, aby sme simulovali real-time prepnutie streamu
+            videoPlayer.src = url;
+            videoPlayer.load();
+            
+            // Snažíme sa pokračovať v prehrávaní z rovnakej pozície
+            videoPlayer.onloadedmetadata = () => {
+                videoPlayer.currentTime = currentTime;
+                videoPlayer.play();
+                videoPlayer.onloadedmetadata = null; // Zrušíme listener
+            };
+            
+            document.getElementById('quality-menu').classList.add('hidden');
+            if (url !== localVideoBlobUrl) {
+                showMessage('Prepnutie Kvality', `Prehrávam externý súbor v kvalite ${quality}.`, false);
+            }
+            setupQualitySelector(); // Znova vykreslí menu pre zmenu stavu
+        }
+
+        /** Vykreslí zoznam kvalít videa a priradí funkčnosť */
+        function setupQualitySelector() {
             const qualityMenu = document.getElementById('quality-menu');
             qualityMenu.innerHTML = '';
             
-            // Logika pre simuláciu kvalít a ich odomknutie
-            const qualities = ['720p', '1080p', '2K', '4K'];
+            const qualities = Object.keys(QUALITY_SOURCES);
             const current = videoPlayer.dataset.quality || '720p';
 
             qualities.forEach(q => {
                 const isUnlocked = userData.unlockedQualities.includes(q);
                 const qualityDiv = document.createElement('div');
-                qualityDiv.className = `p-2 rounded-lg text-center cursor-pointer transition flex justify-between items-center ${isUnlocked ? (q === current ? 'bg-primary-blue' : 'hover:bg-slate-700') : 'bg-slate-700/50 cursor-not-allowed'}`;
+                
+                const url = localVideoBlobUrl || QUALITY_SOURCES[q];
+                const isDisabled = !isUnlocked || (localVideoBlobUrl && q !== current);
+                
+                qualityDiv.className = `p-2 rounded-lg text-center cursor-pointer transition flex justify-between items-center text-sm font-semibold ${
+                    isDisabled 
+                        ? 'bg-slate-700/50 cursor-not-allowed text-gray-400' 
+                        : (q === current ? 'bg-primary-blue text-white' : 'hover:bg-slate-700 text-white')
+                }`;
                 
                 const lockIcon = isUnlocked ? '' : '🔒';
                 
-                if (isUnlocked) {
+                if (!isDisabled) {
                     qualityDiv.onclick = () => {
-                        videoPlayer.dataset.quality = q;
-                        document.getElementById('current-quality').textContent = q;
-                        qualityMenu.classList.add('hidden');
-                        showMessage('Kvalita', `Kvalita nastavená na ${q}. (Simulácia)`, false);
+                        // Ak je načítaný lokálny súbor, prepínanie kvalít je zakázané (pretože máme len 1 lokálny súbor)
+                        if (localVideoBlobUrl) {
+                            if (q === current) return;
+                            setVideoQuality(q, localVideoBlobUrl); // Prepneme na iný "virtuálny" stream, ale URL je rovnaká
+                        } else {
+                            // Prepnutie na reálny externý stream
+                            setVideoQuality(q, QUALITY_SOURCES[q]);
+                        }
                     };
                 }
 
@@ -323,6 +366,17 @@
             });
             
             document.getElementById('quality-btn').onclick = () => qualityMenu.classList.toggle('hidden');
+            
+            // Ak je načítaný lokálny súbor, prepnutie kvalít je neviditeľné
+            if (localVideoBlobUrl) {
+                 document.getElementById('quality-btn').title = "Prehráva sa lokálny súbor (kvalita je daná súborom)";
+                 document.getElementById('quality-btn').disabled = true;
+                 document.getElementById('quality-btn').classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+                 document.getElementById('quality-btn').title = "Prepínanie demonštračných kvalít";
+                 document.getElementById('quality-btn').disabled = false;
+                 document.getElementById('quality-btn').classList.remove('opacity-50', 'cursor-not-allowed');
+            }
         }
 
         /** Vykreslí shop s odomknuteľnými funkciami */
@@ -352,7 +406,6 @@
                     description: feature.description,
                     price: feature.price,
                     type: 'aifeature',
-                    // Skutočný stav odomknutia je z userData
                     unlocked: userData.unlockedFeatures.includes(key)
                 }))
             ];
@@ -403,7 +456,7 @@
             updateBalanceUI();
             updateGamepassUI();
             renderShop();
-            renderQualityMenu();
+            setupQualitySelector();
             renderAIFeatures();
             checkDailyBonus();
             document.getElementById('loading-overlay').classList.add('hidden');
@@ -471,7 +524,7 @@
                 showMessage('Úspech', `Úspešne ste odomkli funkciu/kvalitu: ${itemId}!`, false);
                 updateBalanceUI();
                 renderShop();
-                renderQualityMenu();
+                setupQualitySelector(); // Aktualizuje menu kvalít
                 renderAIFeatures();
                 saveState();
             } else {
@@ -567,7 +620,7 @@
             const subtitleDisplay = document.getElementById('subtitle-display');
             
             if (!player.src) {
-                showMessage('Chyba', 'Najprv načítajte video súbor.');
+                showMessage('Chyba', 'Najprv načítajte video súbor alebo externú kvalitu.');
                 return;
             }
 
@@ -593,23 +646,38 @@
         const progressBarFill = document.getElementById('progress-bar-fill');
         const progressBarBg = document.getElementById('progress-bar-bg');
         const timeDisplay = document.getElementById('time-display');
+        const fileInput = document.getElementById('file-input');
         
         let videoLoaded = false;
         
         /** Načíta MP4 súbor do prehrávača */
-        window.loadVideo = function(event) {
-            const file = event.target.files[0];
+        function loadVideoFile() {
+            const file = fileInput.files[0];
             if (file && file.type === 'video/mp4') {
-                const url = URL.createObjectURL(file);
-                videoPlayer.src = url;
+                if (localVideoBlobUrl) {
+                    URL.revokeObjectURL(localVideoBlobUrl); // Uvoľníme starú URL
+                }
+                localVideoBlobUrl = URL.createObjectURL(file);
+                videoPlayer.src = localVideoBlobUrl;
                 videoPlayer.load();
                 videoLoaded = true;
-                showMessage('Video Načítané', `Video "${file.name}" je pripravené na prehrávanie.`, false);
+                
+                // Nastavíme kvalitu na 'Local' a zmeníme selector
+                setVideoQuality('Local', localVideoBlobUrl);
+                
+                showMessage('Video Načítané', `Video "${file.name}" (lokálny súbor) je pripravené.`, false);
             } else {
                 showMessage('Chyba', 'Prosím, vyberte platný súbor typu MP4.');
             }
         }
         
+        // Listener pre výber lokálneho súboru
+        document.getElementById('load-file-btn').addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', loadVideoFile);
+
         /** Formátovanie času */
         function formatTime(seconds) {
             const h = Math.floor(seconds / 3600);
@@ -620,8 +688,8 @@
 
         // Tlačidlo Prehrať/Pozastaviť
         playPauseBtn.addEventListener('click', () => {
-            if (!videoLoaded) {
-                 showMessage('Chyba', 'Najprv načítajte video súbor.');
+            if (!videoPlayer.src) {
+                 showMessage('Chyba', 'Najprv načítajte video súbor alebo externú kvalitu.');
                  return;
             }
             if (videoPlayer.paused) {
@@ -657,6 +725,7 @@
 
         // Kliknutie na časovú osu
         progressBarBg.addEventListener('click', (e) => {
+            if (!videoPlayer.src) return;
             const rect = progressBarBg.getBoundingClientRect();
             const pos = (e.clientX - rect.left) / rect.width;
             videoPlayer.currentTime = pos * videoPlayer.duration;
@@ -687,6 +756,7 @@
 
         document.getElementById('settings-btn').addEventListener('click', () => {
             document.getElementById('api-key-input').value = userData.apiKey || '';
+            renderAIFeatures(); // Zabezpečí aktuálny stav v nastaveniach
             document.getElementById('settings-modal').classList.remove('hidden');
             document.getElementById('settings-modal').classList.add('flex');
         });
@@ -710,19 +780,15 @@
         // --- INICIALIZÁCIA ---
 
         document.addEventListener('DOMContentLoaded', () => {
-            // 1. Načítanie stavu z localStorage
             loadState();
             
-            // 2. Nastaví defaultnú kvalitu (ak ešte nebola nastavená)
-            if (!videoPlayer.dataset.quality) {
-                videoPlayer.dataset.quality = '720p';
-            }
-            document.getElementById('current-quality').textContent = videoPlayer.dataset.quality;
+            // Nastavíme počiatočnú kvalitu (demonštračný súbor 720p)
+            setVideoQuality('720p', QUALITY_SOURCES['720p']);
 
-            // 3. Vykreslenie UI
             renderUI();
         });
 
     </script>
 </body>
 </html>
+
